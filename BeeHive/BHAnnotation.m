@@ -17,45 +17,47 @@
 #import <objc/message.h>
 #include <mach-o/ldsyms.h>
 
+@implementation BHAnnotation
+
 NSArray<NSString *>* BHReadConfiguration(char *sectionName,const struct mach_header *mhp);
-static void dyld_callback(const struct mach_header *mhp, intptr_t vmaddr_slide)
-{
-    NSArray *mods = BHReadConfiguration(BeehiveModSectName, mhp);
-    for (NSString *modName in mods) {
-        Class cls;
-        if (modName) {
-            cls = NSClassFromString(modName);
-            
-            if (cls) {
-                [[BHModuleManager sharedManager] registerDynamicModule:cls];
-            }
-        }
-    }
-    
-    //register services
-    NSArray<NSString *> *services = BHReadConfiguration(BeehiveServiceSectName,mhp);
-    for (NSString *map in services) {
-        NSData *jsonData =  [map dataUsingEncoding:NSUTF8StringEncoding];
-        NSError *error = nil;
-        id json = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&error];
-        if (!error) {
-            if ([json isKindOfClass:[NSDictionary class]] && [json allKeys].count) {
+
++ (void)load{
+    uint32_t image_count = _dyld_image_count();
+    for (uint32_t image_index = 0; image_index < image_count; image_index++) {
+        const struct mach_header *mhp = (const struct mach_header *)_dyld_get_image_header(image_index);
+        
+        NSArray *mods = BHReadConfiguration(BeehiveModSectName, mhp);
+        for (NSString *modName in mods) {
+            Class cls;
+            if (modName) {
+                cls = NSClassFromString(modName);
                 
-                NSString *protocol = [json allKeys][0];
-                NSString *clsName  = [json allValues][0];
-                
-                if (protocol && clsName) {
-                    [[BHServiceManager sharedManager] registerService:NSProtocolFromString(protocol) implClass:NSClassFromString(clsName)];
+                if (cls) {
+                    [[BHModuleManager sharedManager] registerDynamicModule:cls];
                 }
-                
+            }
+        }
+        
+        //register services
+        NSArray<NSString *> *services = BHReadConfiguration(BeehiveServiceSectName,mhp);
+        for (NSString *map in services) {
+            NSData *jsonData =  [map dataUsingEncoding:NSUTF8StringEncoding];
+            NSError *error = nil;
+            id json = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&error];
+            if (!error) {
+                if ([json isKindOfClass:[NSDictionary class]] && [json allKeys].count) {
+                    
+                    NSString *protocol = [json allKeys][0];
+                    NSString *clsName  = [json allValues][0];
+                    
+                    if (protocol && clsName) {
+                        [[BHServiceManager sharedManager] registerService:NSProtocolFromString(protocol) implClass:NSClassFromString(clsName)];
+                    }
+                    
+                }
             }
         }
     }
-    
-}
-__attribute__((constructor))
-void initProphet() {
-    _dyld_register_func_for_add_image(dyld_callback);
 }
 
 NSArray<NSString *>* BHReadConfiguration(char *sectionName,const struct mach_header *mhp)
@@ -80,11 +82,7 @@ NSArray<NSString *>* BHReadConfiguration(char *sectionName,const struct mach_hea
     }
     
     return configs;
-
-    
 }
-
-@implementation BHAnnotation
 
 @end
 
